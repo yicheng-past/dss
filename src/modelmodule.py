@@ -37,9 +37,9 @@ class PLSleepModel(LightningModule):
         self.duration = duration
         self.validation_step_outputs: list = []
         if self.cfg.trainer.monitor == 'val_loss':
-            self.__best_value = np.inf
+            self.__best_loss = np.inf
         else:
-            self.__best_value = -np.inf
+            self.__best_score = -np.inf
 
     def forward(
         self,
