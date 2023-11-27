@@ -36,7 +36,10 @@ class PLSleepModel(LightningModule):
         )
         self.duration = duration
         self.validation_step_outputs: list = []
-        self.__best_loss = np.inf
+        if self.cfg.trainer.monitor == 'val_loss':
+            self.__best_value = np.inf
+        else:
+            self.__best_value = -np.inf
 
     def forward(
         self,
@@ -100,15 +103,27 @@ class PLSleepModel(LightningModule):
         )
         score = event_detection_ap(self.val_event_df.to_pandas(), val_pred_df.to_pandas())
         self.log("val_score", score, on_step=False, on_epoch=True, logger=True, prog_bar=True)
+        
+        if self.cfg.trainer.monitor == 'val_loss':
+            current_value = loss
+            best_value = self.__best_loss
+            is_better = current_value < best_value
+        else:  # Using val_score
+            current_value = score
+            best_value = self.__best_score
+            is_better = current_value > best_value
 
-        if loss < self.__best_loss:
+        if is_better:
             np.save("keys.npy", np.array(keys))
             np.save("labels.npy", labels)
             np.save("preds.npy", preds)
             val_pred_df.write_csv("val_pred_df.csv")
             torch.save(self.model.state_dict(), "best_model.pth")
-            print(f"Saved best model {self.__best_loss} -> {loss}")
-            self.__best_loss = loss
+            print(f"Saved best model with {self.cfg.trainer.monitor} {best_value} -> {current_value}")
+            if self.cfg.trainer.monitor == 'val_loss':
+                self.__best_loss = current_value
+            else:
+                self.__best_score = current_value
 
         self.validation_step_outputs.clear()
 
