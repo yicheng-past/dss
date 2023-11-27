@@ -67,6 +67,7 @@ features:
   # - "minute_cos"
   # - "anglez_sin"
   # - "anglez_cos"
+  - "anglez_diff"
 
 # optimizer
 optimizer:
