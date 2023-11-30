@@ -104,11 +104,15 @@ def inference(
         preds = np.concatenate(preds)
 
         if preds_sum is None:
-            preds_sum = np.zeros_like(preds)
+            preds_sum = preds
+        else:
+            preds_sum += preds
 
-            preds_sum += np.concatenate(preds)
-
-    preds_avg = preds_sum / num_models
+    # Average the predictions if there are multiple models
+    if len(models) > 1:
+        preds_avg = preds_sum / num_models
+    else:
+        preds_avg = preds_sum
 
     return keys, preds_avg  # type: ignore
 
