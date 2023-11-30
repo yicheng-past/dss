@@ -17,7 +17,7 @@ from src.utils.common import nearest_valid_size, trace
 from src.utils.post_process import post_process_for_seg
 
 
-def load_model(cfg: InferenceConfig) -> BaseModel:
+def load_model(cfg: InferenceConfig, path=None) -> BaseModel:
     num_timesteps = nearest_valid_size(int(cfg.duration * cfg.upsample_rate), cfg.downsample_rate)
     model = get_model(
         cfg,
@@ -29,9 +29,12 @@ def load_model(cfg: InferenceConfig) -> BaseModel:
 
     # load weights
     if cfg.weight is not None:
-        weight_path = (
-            Path(cfg.dir.model_dir) / cfg.weight.exp_name / cfg.weight.run_name / "best_model.pth"
-        )
+        if path:
+            weight_path = path
+        else:
+            weight_path = (
+                Path(cfg.dir.model_dir) / cfg.weight.exp_name / cfg.weight.run_name / "best_model.pth"
+            )
         model.load_state_dict(torch.load(weight_path))
         print('load weight from "{}"'.format(weight_path))
     return model
@@ -68,31 +71,46 @@ def get_test_dataloader(cfg: InferenceConfig) -> DataLoader:
 
 
 def inference(
-    duration: int, loader: DataLoader, model: BaseModel, device: torch.device, use_amp
+    duration: int, loader: DataLoader, models, device: torch.device, use_amp
 ) -> tuple[list[str], np.ndarray]:
-    model = model.to(device)
-    model.eval()
+    # Check if models is a single model or a list of models
+    if isinstance(models, BaseModel):
+        models = [models]
 
-    preds = []
-    keys = []
-    for batch in tqdm(loader, desc="inference"):
-        with torch.no_grad():
-            with torch.cuda.amp.autocast(enabled=use_amp):
-                x = batch["feature"].to(device)
-                output = model.predict(
-                    x,
-                    org_duration=duration,
-                )
-            if output.preds is None:
-                raise ValueError("output.preds is None")
-            else:
-                key = batch["key"]
-                preds.append(output.preds.detach().cpu().numpy())
-                keys.extend(key)
+    preds_sum = None
+    num_models = len(models)
 
-    preds = np.concatenate(preds)
+    for model in models:
+        model = model.to(device)
+        model.eval()
 
-    return keys, preds  # type: ignore
+        preds = []
+        keys = []
+        for batch in tqdm(loader, desc="inference"):
+            with torch.no_grad():
+                with torch.cuda.amp.autocast(enabled=use_amp):
+                    x = batch["feature"].to(device)
+                    output = model.predict(
+                        x,
+                        org_duration=duration,
+                    )
+                if output.preds is None:
+                    raise ValueError("output.preds is None")
+                else:
+                    key = batch["key"]
+                    preds.append(output.preds.detach().cpu().numpy())
+                    keys.extend(key)
+
+        preds = np.concatenate(preds)
+
+        if preds_sum is None:
+            preds_sum = np.zeros_like(preds)
+
+            preds_sum += np.concatenate(preds)
+
+    preds_avg = preds_sum / num_models
+
+    return keys, preds_avg  # type: ignore
 
 
 def make_submission(
@@ -115,11 +133,14 @@ def main(cfg: InferenceConfig):
     with trace("load test dataloader"):
         test_dataloader = get_test_dataloader(cfg)
     with trace("load model"):
-        model = load_model(cfg)
+        models = []
+        for model_path in cfg.path_models:
+            models.append(load_model(cfg, model_path))
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     with trace("inference"):
-        keys, preds = inference(cfg.duration, test_dataloader, model, device, use_amp=cfg.use_amp)
+        keys, preds = inference(cfg.duration, test_dataloader, models, device, use_amp=cfg.use_amp)
 
     with trace("make submission"):
         sub_df = make_submission(
