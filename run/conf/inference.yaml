@@ -55,6 +55,8 @@ features:
   - "enmo"
   - "hour_sin"
   - "hour_cos"
+  - "anglez_sin"
+  - "anglez_cos"
   - "anglez_diff"
 
 path_models:
