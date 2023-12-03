@@ -29,7 +29,7 @@ FEATURE_NAMES = [
     "minute_cos",
     "anglez_sin",
     "anglez_cos",
-    "anglez_diff",
+    "anglez_abs_diff",
 ]
 
 ANGLEZ_MEAN = -8.810476
@@ -60,7 +60,7 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
             pl.col("step") / pl.count("step"),
             pl.col('anglez_rad').sin().alias('anglez_sin'),
             pl.col('anglez_rad').cos().alias('anglez_cos'),
-            pl.col('anglez').diff().fill_null(0).alias("anglez_diff"), 
+            pl.col('anglez').diff(1).abs().fill_null(0).alias("anglez_abs_diff"), 
         )
         .select("series_id", *FEATURE_NAMES)
     )
