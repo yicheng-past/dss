@@ -3,6 +3,7 @@ from pathlib import Path
 
 import hydra
 import numpy as np
+import pandas as pd
 import polars as pl
 from scipy.signal import savgol_filter
 from tqdm import tqdm
@@ -33,7 +34,11 @@ FEATURE_NAMES = [
     "anglez_abs_diff",
     "anglez_savgol_filter_30",
     "anglez_savgol_filter_120",
-    "rolling_unique_anglez_sum"
+    # "rolling_unique_anglez_sum",
+    "anglez_abs_diff_rolling_720",
+    "anglez_abs_diff_rolling_480",
+    "anglez_abs_diff_rolling_60",
+    "anglez_abs_diff_rolling_30",
 ]
 
 ANGLEZ_MEAN = -8.810476
@@ -64,25 +69,51 @@ def rolling_nunique(series: pl.Series, window_size: int) -> pl.Series:
     return unique_counts
 
 
+def rolling_nunique_efficient(series: pl.Series, window: int) -> pl.Series:
+    # Convert Polars Series to Pandas Series
+    pandas_series = series.to_pandas()
+
+    values = pandas_series.values
+    unique_counts = np.zeros(len(values))
+    unique_values = set()
+    rolling_nunique_result = []
+    for i in range(len(values)):
+        if i >= window:
+            unique_values.discard(values[i - window])
+        unique_values.add(values[i])
+        unique_counts[i] = len(unique_values)
+        if i >= window - 1:
+            rolling_nunique_result.append(unique_counts[i])
+        else:
+            rolling_nunique_result.append(np.nan)
+
+    # Convert the result back to Polars Series
+    result_series = pd.Series(rolling_nunique_result, index=pandas_series.index)
+    return pl.Series(result_series.name, result_series.values)
+
+
 def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
     series_df = series_df.with_columns(
         pl.col('anglez').cast(pl.Int64).alias('anglez_int'),
         pl.col('anglez').diff(1).abs().fill_null(0).alias("anglez_abs_diff")
     )
     
-    rolling_unique_counts_5min = rolling_nunique(series_df['anglez_int'], 60)
-    series_df = series_df.with_column((pl.Series('rolling_unique_anglez_5min_window', rolling_unique_counts_5min)).fill_null(0))
+    # rolling_unique_counts_5min = rolling_nunique_efficient(series_df['anglez_int'], 60)
+    # series_df = series_df.with_columns((pl.Series('rolling_unique_anglez_5min_window', rolling_unique_counts_5min)).fill_null(0))
     
-    shift_intervals = [5, 10, 15, 20, 25, 30]
-    for minutes_earlier in shift_intervals:
-        shift_amount = minutes_earlier * 12
-        shifted_column_name = f"rolling_unique_anglez_5min_window_{minutes_earlier}minEarlier"
-        series_df = series_df.with_column(
-            series_df["rolling_unique_anglez_5min_window"].shift(shift_amount).fill_null(0).alias(shifted_column_name)
-        )
-    sum_columns_expr = [pl.col(f"rolling_unique_anglez_5min_window_{minutes}minEarlier") for minutes in shift_intervals]
-    sum_columns_expr.append(pl.col("rolling_unique_anglez_5min_window"))
-    series_df = series_df.with_column(pl.sum(sum_columns_expr).alias("rolling_unique_anglez_sum"))
+    # shift_intervals = [5, 10, 15, 20, 25, 30]
+    # for minutes_earlier in shift_intervals:
+    #     shift_amount = minutes_earlier * 12
+    #     shifted_column_name = f"rolling_unique_anglez_5min_window_{minutes_earlier}minEarlier"
+    #     series_df = series_df.with_columns(
+    #         series_df["rolling_unique_anglez_5min_window"].shift(shift_amount).fill_null(0).alias(shifted_column_name)
+    #     )
+    # sum_columns_expr = [pl.col(f"rolling_unique_anglez_5min_window_{minutes}minEarlier") for minutes in shift_intervals]
+    # sum_columns_expr.append(pl.col("rolling_unique_anglez_5min_window"))
+    # sum_expr = sum_columns_expr[0]
+    # for col_expr in sum_columns_expr[1:]:
+    #     sum_expr += col_expr
+    # series_df = series_df.with_columns(sum_expr.alias("rolling_unique_anglez_sum"))
     
     # series_df = series_df.with_columns(
     #     (pl.Series('rolling_unique_anglez_5min_window_5minEarlier', series_df['rolling_unique_anglez_5min_window'].shift(60))).fill_null(0),
@@ -101,6 +132,16 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
     anglez_savgol_filter_120 = savgol_filter(series_df['anglez_abs_diff'].to_numpy(), window_length_120, 3)
     series_df = series_df.with_columns(pl.Series('anglez_savgol_filter_30', anglez_savgol_filter_30),
                                        pl.Series('anglez_savgol_filter_120', anglez_savgol_filter_120))
+    
+    series_df = (
+        series_df
+        .with_columns(
+            pl.col("anglez_abs_diff").rolling_mean(8640).alias("anglez_abs_diff_rolling_720"),
+            pl.col("anglez_abs_diff").rolling_mean(5760).alias("anglez_abs_diff_rolling_480"),
+            pl.col("anglez_abs_diff").rolling_mean(720).alias("anglez_abs_diff_rolling_60"),
+            pl.col("anglez_abs_diff").rolling_mean(360).alias("anglez_abs_diff_rolling_30"),
+        )
+    )
    
     series_df = (
         series_df.with_row_count("step")
