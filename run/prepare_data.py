@@ -4,6 +4,7 @@ from pathlib import Path
 import hydra
 import numpy as np
 import polars as pl
+from scipy.signal import savgol_filter
 from tqdm import tqdm
 
 from src.conf import PrepareDataConfig
@@ -30,6 +31,7 @@ FEATURE_NAMES = [
     "anglez_sin",
     "anglez_cos",
     "anglez_abs_diff",
+    "anglez_savgol_filter_300",
 ]
 
 ANGLEZ_MEAN = -8.810476
@@ -61,6 +63,10 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
             pl.col('anglez_rad').sin().alias('anglez_sin'),
             pl.col('anglez_rad').cos().alias('anglez_cos'),
             pl.col('anglez').diff(1).abs().fill_null(0).alias("anglez_abs_diff"), 
+            pl.Series(
+                'anglez_savgol_filter_300', 
+                savgol_filter(series_df['anglez_abs_diff'].copy(), 720 * 5, 3)
+            ),
         )
         .select("series_id", *FEATURE_NAMES)
     )

@@ -68,6 +68,7 @@ features:
   - "anglez_sin"
   - "anglez_cos"
   - "anglez_abs_diff"
+  - "anglez_savgol_filter_300"
 
 # optimizer
 optimizer:
