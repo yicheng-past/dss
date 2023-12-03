@@ -35,10 +35,10 @@ FEATURE_NAMES = [
     "anglez_savgol_filter_30",
     "anglez_savgol_filter_120",
     # "rolling_unique_anglez_sum",
-    "anglez_abs_diff_rolling_720",
-    "anglez_abs_diff_rolling_480",
-    "anglez_abs_diff_rolling_60",
-    "anglez_abs_diff_rolling_30",
+    # "anglez_abs_diff_rolling_720",
+    # "anglez_abs_diff_rolling_480",
+    # "anglez_abs_diff_rolling_60",
+    # "anglez_abs_diff_rolling_30",
 ]
 
 ANGLEZ_MEAN = -8.810476
@@ -133,15 +133,15 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
     series_df = series_df.with_columns(pl.Series('anglez_savgol_filter_30', anglez_savgol_filter_30),
                                        pl.Series('anglez_savgol_filter_120', anglez_savgol_filter_120))
     
-    series_df = (
-        series_df
-        .with_columns(
-            pl.col("anglez_abs_diff").rolling_mean(8640).alias("anglez_abs_diff_rolling_720"),
-            pl.col("anglez_abs_diff").rolling_mean(5760).alias("anglez_abs_diff_rolling_480"),
-            pl.col("anglez_abs_diff").rolling_mean(720).alias("anglez_abs_diff_rolling_60"),
-            pl.col("anglez_abs_diff").rolling_mean(360).alias("anglez_abs_diff_rolling_30"),
-        )
-    )
+    # series_df = (
+    #     series_df
+    #     .with_columns(
+    #         pl.col("anglez_abs_diff").rolling_mean(8640).alias("anglez_abs_diff_rolling_720"),
+    #         pl.col("anglez_abs_diff").rolling_mean(5760).alias("anglez_abs_diff_rolling_480"),
+    #         pl.col("anglez_abs_diff").rolling_mean(720).alias("anglez_abs_diff_rolling_60"),
+    #         pl.col("anglez_abs_diff").rolling_mean(360).alias("anglez_abs_diff_rolling_30"),
+    #     )
+    # )
    
     series_df = (
         series_df.with_row_count("step")

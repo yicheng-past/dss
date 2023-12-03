@@ -61,10 +61,10 @@ features:
   - "anglez_savgol_filter_30"
   - "anglez_savgol_filter_120"
   # - "rolling_unique_anglez_sum"
-  - "anglez_abs_diff_rolling_720"
-  - "anglez_abs_diff_rolling_480"
-  - "anglez_abs_diff_rolling_60"
-  - "anglez_abs_diff_rolling_30"
+  # - "anglez_abs_diff_rolling_720"
+  # - "anglez_abs_diff_rolling_480"
+  # - "anglez_abs_diff_rolling_60"
+  # - "anglez_abs_diff_rolling_30"
 
 path_models:
   - ""
