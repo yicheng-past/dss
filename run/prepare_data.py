@@ -31,7 +31,9 @@ FEATURE_NAMES = [
     "anglez_sin",
     "anglez_cos",
     "anglez_abs_diff",
-    "anglez_savgol_filter_300",
+    "anglez_savgol_filter_30",
+    "anglez_savgol_filter_120",
+    "rolling_unique_anglez_sum"
 ]
 
 ANGLEZ_MEAN = -8.810476
@@ -52,7 +54,54 @@ def deg_to_rad(x: pl.Expr) -> pl.Expr:
     return np.pi / 180 * x
 
 
+def rolling_nunique(series: pl.Series, window_size: int) -> pl.Series:
+    # Create a rolling window that collects lists of values within the window
+    rolling_lists = series.rolling(window_size).arr()
+
+    # Use apply to count the unique values within each list
+    unique_counts = rolling_lists.apply(lambda x: len(set(x)))
+
+    return unique_counts
+
+
 def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
+    series_df = series_df.with_columns(
+        pl.col('anglez').cast(pl.Int64).alias('anglez_int'),
+        pl.col('anglez').diff(1).abs().fill_null(0).alias("anglez_abs_diff")
+    )
+    
+    rolling_unique_counts_5min = rolling_nunique(series_df['anglez_int'], 60)
+    series_df = series_df.with_column((pl.Series('rolling_unique_anglez_5min_window', rolling_unique_counts_5min)).fill_null(0))
+    
+    shift_intervals = [5, 10, 15, 20, 25, 30]
+    for minutes_earlier in shift_intervals:
+        shift_amount = minutes_earlier * 12
+        shifted_column_name = f"rolling_unique_anglez_5min_window_{minutes_earlier}minEarlier"
+        series_df = series_df.with_column(
+            series_df["rolling_unique_anglez_5min_window"].shift(shift_amount).fill_null(0).alias(shifted_column_name)
+        )
+    sum_columns_expr = [pl.col(f"rolling_unique_anglez_5min_window_{minutes}minEarlier") for minutes in shift_intervals]
+    sum_columns_expr.append(pl.col("rolling_unique_anglez_5min_window"))
+    series_df = series_df.with_column(pl.sum(sum_columns_expr).alias("rolling_unique_anglez_sum"))
+    
+    # series_df = series_df.with_columns(
+    #     (pl.Series('rolling_unique_anglez_5min_window_5minEarlier', series_df['rolling_unique_anglez_5min_window'].shift(60))).fill_null(0),
+    #     (pl.Series('rolling_unique_anglez_5min_window_10minEarlier', series_df['rolling_unique_anglez_5min_window'].shift(120))).fill_null(0),
+    # )
+
+    window_length_30 = min(360 - 1, len(series_df['anglez_abs_diff']) - 1)
+    if window_length_30 % 2 == 0:
+        window_length_30 -= 1
+    window_length_30 = max(1, window_length_30)
+    anglez_savgol_filter_30 = savgol_filter(series_df['anglez_abs_diff'].to_numpy(), window_length_30, 3)
+    window_length_120 = min(1440 - 1, len(series_df['anglez_abs_diff']) - 1)
+    if window_length_120 % 2 == 0:
+        window_length_120 -= 1
+    window_length_120 = max(1, window_length_120)
+    anglez_savgol_filter_120 = savgol_filter(series_df['anglez_abs_diff'].to_numpy(), window_length_120, 3)
+    series_df = series_df.with_columns(pl.Series('anglez_savgol_filter_30', anglez_savgol_filter_30),
+                                       pl.Series('anglez_savgol_filter_120', anglez_savgol_filter_120))
+   
     series_df = (
         series_df.with_row_count("step")
         .with_columns(
@@ -62,11 +111,6 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
             pl.col("step") / pl.count("step"),
             pl.col('anglez_rad').sin().alias('anglez_sin'),
             pl.col('anglez_rad').cos().alias('anglez_cos'),
-            pl.col('anglez').diff(1).abs().fill_null(0).alias("anglez_abs_diff"), 
-            pl.Series(
-                'anglez_savgol_filter_300', 
-                savgol_filter(series_df['anglez_abs_diff'].copy(), 720 * 5, 3)
-            ),
         )
         .select("series_id", *FEATURE_NAMES)
     )
