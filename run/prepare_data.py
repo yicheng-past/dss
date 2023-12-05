@@ -33,7 +33,9 @@ FEATURE_NAMES = [
     "anglez_cos",
     "anglez_abs_diff",
     "anglez_savgol_filter_30",
+    "anglez_savgol_filter_60",
     "anglez_savgol_filter_120",
+    "anglez_savgol_filter_180",
     # "rolling_unique_anglez_sum",
     # "anglez_abs_diff_rolling_720",
     # "anglez_abs_diff_rolling_480",
@@ -125,13 +127,28 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
         window_length_30 -= 1
     window_length_30 = max(1, window_length_30)
     anglez_savgol_filter_30 = savgol_filter(series_df['anglez_abs_diff'].to_numpy(), window_length_30, 3)
+    
+    window_length_60 = min(720 - 1, len(series_df['anglez_abs_diff']) - 1)
+    if window_length_60 % 2 == 0:
+        window_length_60 -= 1
+    window_length_60 = max(1, window_length_60)
+    anglez_savgol_filter_60 = savgol_filter(series_df['anglez_abs_diff'].to_numpy(), window_length_60, 3)
+    
     window_length_120 = min(1440 - 1, len(series_df['anglez_abs_diff']) - 1)
     if window_length_120 % 2 == 0:
         window_length_120 -= 1
     window_length_120 = max(1, window_length_120)
     anglez_savgol_filter_120 = savgol_filter(series_df['anglez_abs_diff'].to_numpy(), window_length_120, 3)
+    
+    window_length_180 = min(2160 - 1, len(series_df['anglez_abs_diff']) - 1)
+    if window_length_180 % 2 == 0:
+        window_length_180 -= 1
+    window_length_180 = max(1, window_length_180)
+    anglez_savgol_filter_180 = savgol_filter(series_df['anglez_abs_diff'].to_numpy(), window_length_180, 3)
     series_df = series_df.with_columns(pl.Series('anglez_savgol_filter_30', anglez_savgol_filter_30),
-                                       pl.Series('anglez_savgol_filter_120', anglez_savgol_filter_120))
+                                       pl.Series('anglez_savgol_filter_60', anglez_savgol_filter_60),
+                                       pl.Series('anglez_savgol_filter_120', anglez_savgol_filter_120),
+                                       pl.Series('anglez_savgol_filter_180', anglez_savgol_filter_180))
     
     # series_df = (
     #     series_df
